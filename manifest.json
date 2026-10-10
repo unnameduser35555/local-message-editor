@@ -1,8 +1,8 @@
 {
-  "name": "Local Message Editor",
-  "description": "メッセージを長押しして、この端末だけで編集・非表示にします",
+  "name": "Local Message Editor v1.3",
+  "description": "v1.3 メッセージを長押しして、この端末だけで編集・非表示にします（編集はDiscord標準の編集UI）",
   "authors": [{ "name": "ooz38" }],
   "main": "index.js",
-  "hash": "0bc881bd78ee49d8c35ddcc5043df1e83dde6ec1b16dd3a6d3cba9b290fdf3a4",
+  "hash": "aa421d71b046abc7f83ea9b6e3e28348ab410f609a793ebd9085e1607fff5723",
   "vendetta": { "icon": "ic_edit_24px" }
 }
