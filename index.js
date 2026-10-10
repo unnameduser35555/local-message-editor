@@ -1,21 +1,30 @@
 (function(){
   var v = vendetta;
+  var VERSION = "v2.0";
   var React = v.metro.common.React;
   var RN = v.metro.common.ReactNative;
   var FluxDispatcher = v.metro.common.FluxDispatcher;
+  var clipboard = v.metro.common.clipboard;
   var ActionSheet = v.metro.findByProps("openLazy", "hideActionSheet");
   var EditActions = v.metro.findByProps("startEditMessage") || v.metro.findByProps("deleteMessage");
   var SendActions = v.metro.findByProps("editMessage", "sendMessage");
+  var MessageStore = v.metro.findByStoreName("MessageStore");
   var patches = [];
   var pending = null;
-  var h = React.createElement;
 
   function toast(t){
-    try { v.ui.toasts.showToast(t); } catch(e) { console.log("[LocalMessageEditor] " + t); }
+    try { v.ui.toasts.showToast(t); } catch(e) { console.log("[Lex] " + t); }
   }
 
-  function assetId(name){
-    try { return v.ui.assets.getAssetIDByName(name); } catch(e) { return undefined; }
+  function assetId(names){
+    var list = Array.isArray(names) ? names : [names];
+    for (var i = 0; i < list.length; i++) {
+      try {
+        var id = v.ui.assets.getAssetIDByName(list[i]);
+        if (id !== undefined && id !== null) return id;
+      } catch(e) {}
+    }
+    return undefined;
   }
 
   function isRow(el){
@@ -23,11 +32,11 @@
       (el.props.message !== undefined || el.props.label !== undefined);
   }
 
-  function makeRow(tpl, key, text, iconName, onPress){
+  function makeRow(tpl, key, text, icons, onPress){
     var p = { key: key, onPress: onPress, destructive: false };
     if ("message" in tpl.props) p.message = text;
     if ("label" in tpl.props) p.label = text;
-    var id = assetId(iconName);
+    var id = assetId(icons);
     if (id !== undefined && "iconSource" in tpl.props) p.iconSource = id;
     return React.cloneElement(tpl, p);
   }
@@ -36,61 +45,13 @@
     try { ActionSheet.hideActionSheet(); } catch(e) {}
   }
 
-  function applyEdit(message, value){
-    FluxDispatcher.dispatch({
-      type: "MESSAGE_UPDATE",
-      message: { id: message.id, channel_id: message.channel_id, content: String(value) }
-    });
-    toast("この端末だけ編集しました");
+  function update(message, patch){
+    var body = { id: message.id, channel_id: message.channel_id };
+    for (var k in patch) body[k] = patch[k];
+    FluxDispatcher.dispatch({ type: "MESSAGE_UPDATE", message: body });
   }
 
-  function btn(label, primary, onPress){
-    return h(RN.Pressable, {
-      onPress: onPress,
-      style: {
-        flex: 1, marginHorizontal: 4, paddingVertical: 12, borderRadius: 8,
-        alignItems: "center", backgroundColor: primary ? "#5865f2" : "#4e5058"
-      }
-    }, h(RN.Text, { style: { color: "#ffffff", fontWeight: "bold" } }, label));
-  }
-
-  function EditSheet(props){
-    var st = React.useState(String(props.initial || ""));
-    var text = st[0], setText = st[1];
-    return h(RN.View, {
-      style: {
-        backgroundColor: "#2b2d31", padding: 16, paddingBottom: 28,
-        borderTopLeftRadius: 16, borderTopRightRadius: 16
-      }
-    },
-      h(RN.Text, { style: { color: "#ffffff", fontSize: 16, fontWeight: "bold", marginBottom: 10 } }, "ローカル編集（この端末だけ）"),
-      h(RN.TextInput, {
-        value: text,
-        onChangeText: setText,
-        multiline: true,
-        autoFocus: true,
-        placeholder: "表示する内容",
-        placeholderTextColor: "#80848e",
-        style: {
-          color: "#ffffff", backgroundColor: "#1e1f22", borderRadius: 8,
-          padding: 10, minHeight: 100, textAlignVertical: "top"
-        }
-      }),
-      h(RN.View, { style: { flexDirection: "row", marginTop: 14 } },
-        btn("キャンセル", false, function(){ closeSheet(); }),
-        btn("適用", true, function(){ closeSheet(); applyEdit(props.message, text); })
-      )
-    );
-  }
-
-  function openFallbackSheet(message){
-    ActionSheet.openLazy(
-      Promise.resolve({ default: EditSheet }),
-      "LocalMessageEditorSheet",
-      { message: message, initial: message.content }
-    );
-  }
-
+  // ---- 本文: Discord標準の編集UIを使う ----
   function doEdit(message){
     closeSheet();
     setTimeout(function(){
@@ -101,22 +62,100 @@
           return;
         } catch(e) {
           pending = null;
-          console.log("[LocalMessageEditor] startEditMessage failed", e);
+          console.log("[Lex] startEditMessage failed", e);
         }
       }
-      toast("v1.4: 標準の編集UIが見つからないため簡易画面を使います");
-      openFallbackSheet(message);
+      toast("Lex " + VERSION + ": 標準の編集UIが見つかりません");
     }, 300);
+  }
+
+  // ---- 画像: クリップボードのURLに差し替え ----
+  function imgSize(url){
+    return new Promise(function(resolve){
+      try { RN.Image.getSize(url, function(w, h){ resolve({ w: w, h: h }); }, function(){ resolve(null); }); }
+      catch(e) { resolve(null); }
+    });
+  }
+
+  function withUrl(obj, url, w, h){
+    return Object.assign({}, obj, { url: url, proxy_url: url, proxyURL: url, width: w, height: h });
+  }
+
+  function doReplaceImage(message){
+    closeSheet();
+    Promise.resolve(clipboard.getString()).then(function(raw){
+      var url = String(raw || "").trim();
+      if (!/^https?:\/\/\S+$/i.test(url)) {
+        toast("画像のURLをコピーしてから、もう一度押してください");
+        return;
+      }
+      return imgSize(url).then(function(sz){
+        var w = sz ? sz.w : 512, h = sz ? sz.h : 512;
+        var hasEmbedImage = false;
+        var embeds = (message.embeds || []).map(function(e){
+          var c = Object.assign({}, e);
+          if (c.image) { c.image = withUrl(c.image, url, w, h); hasEmbedImage = true; }
+          if (c.thumbnail) { c.thumbnail = withUrl(c.thumbnail, url, w, h); hasEmbedImage = true; }
+          return c;
+        });
+        var atts = (message.attachments || []).map(function(a){
+          var c = withUrl(a, url, w, h);
+          c.content_type = "image/png";
+          c.filename = "image.png";
+          return c;
+        });
+        if (!atts.length && !hasEmbedImage) {
+          atts.push({
+            id: "lex-" + Date.now(), filename: "image.png", size: 0, content_type: "image/png",
+            url: url, proxy_url: url, proxyURL: url, width: w, height: h
+          });
+        }
+        update(message, { attachments: atts, embeds: embeds });
+        toast("画像をこの端末だけ差し替えました");
+      });
+    }).catch(function(e){ console.log("[Lex] replace image failed", e); toast("画像の差し替えに失敗しました"); });
+  }
+
+  // ---- 画像・埋め込みを消す ----
+  function isMediaEmbed(e){
+    return !!e && (!!e.image || !!e.thumbnail || !!e.video || e.type === "image" || e.type === "gifv" || e.type === "video");
+  }
+
+  function doRemoveMedia(message){
+    closeSheet();
+    update(message, {
+      attachments: [],
+      embeds: (message.embeds || []).filter(function(e){ return !isMediaEmbed(e); })
+    });
+    toast("画像・埋め込みをこの端末だけ消しました");
+  }
+
+  // ---- 非表示 ----
+  function stillThere(message){
+    try { return !!(MessageStore && MessageStore.getMessage(message.channel_id, message.id)); }
+    catch(e) { return false; }
   }
 
   function doHide(message){
     closeSheet();
-    FluxDispatcher.dispatch({ type: "MESSAGE_DELETE", id: message.id, channelId: message.channel_id });
-    toast("この端末だけ非表示にしました");
+    var cid = message.channel_id, id = message.id;
+    FluxDispatcher.dispatch({ type: "MESSAGE_DELETE", id: id, channelId: cid });
+    var how = "DELETE";
+    if (stillThere(message)) {
+      FluxDispatcher.dispatch({ type: "MESSAGE_DELETE_BULK", ids: [id], channelId: cid });
+      how = "BULK";
+    }
+    if (stillThere(message)) {
+      update(message, { content: "", attachments: [], embeds: [] });
+      how = "BLANK";
+    }
+    toast("非表示 (" + how + ")");
   }
 
   return {
     onLoad: function(){
+      console.log("[Lex] Lex Message Editor " + VERSION + " loaded");
+
       if (SendActions && typeof SendActions.editMessage === "function") {
         patches.push(v.patcher.instead("editMessage", SendActions, function(args, orig){
           var channelId = args[0], messageId = args[1], body = args[2];
@@ -151,12 +190,14 @@
               return Array.isArray(x) && x.some(isRow);
             });
             if (!rows) return;
-            if (rows.some(function(r){ return r && r.key === "lme-edit"; })) return;
+            if (rows.some(function(r){ return r && r.key === "lex-edit"; })) return;
             var tpl = rows.find(isRow);
             var pos = Math.min(rows.length, 2);
             rows.splice(pos, 0,
-              makeRow(tpl, "lme-edit", "ローカル編集", "ic_edit_24px", function(){ doEdit(message); }),
-              makeRow(tpl, "lme-hide", "ローカルで非表示", "ic_visibility_off_24px", function(){ doHide(message); })
+              makeRow(tpl, "lex-edit", "Lex: 本文を編集", "ic_edit_24px", function(){ doEdit(message); }),
+              makeRow(tpl, "lex-img", "Lex: 画像を差し替え（コピーしたURL）", ["ic_image_24px", "ic_image"], function(){ doReplaceImage(message); }),
+              makeRow(tpl, "lex-rmimg", "Lex: 画像・埋め込みを消す", ["ic_close_16px", "ic_close"], function(){ doRemoveMedia(message); }),
+              makeRow(tpl, "lex-hide", "Lex: 非表示", "ic_visibility_off_24px", function(){ doHide(message); })
             );
           });
         });
