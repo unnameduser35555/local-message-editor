@@ -3,6 +3,6 @@
   "description": "メッセージを長押しして、この端末だけで編集・非表示にします",
   "authors": [{ "name": "ooz38" }],
   "main": "index.js",
-  "hash": "fba7d9a122dea8228cb455770737a1983a732750849446da415bbe593f6d33ea",
+  "hash": "0bc881bd78ee49d8c35ddcc5043df1e83dde6ec1b16dd3a6d3cba9b290fdf3a4",
   "vendetta": { "icon": "ic_edit_24px" }
 }

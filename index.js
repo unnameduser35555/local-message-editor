@@ -1,9 +1,11 @@
 (function(){
   var v = vendetta;
   var React = v.metro.common.React;
+  var RN = v.metro.common.ReactNative;
   var FluxDispatcher = v.metro.common.FluxDispatcher;
   var ActionSheet = v.metro.findByProps("openLazy", "hideActionSheet");
   var patches = [];
+  var h = React.createElement;
 
   function toast(t){
     try { v.ui.toasts.showToast(t); } catch(e) { console.log("[LocalMessageEditor] " + t); }
@@ -31,23 +33,61 @@
     try { ActionSheet.hideActionSheet(); } catch(e) {}
   }
 
+  function applyEdit(message, value){
+    FluxDispatcher.dispatch({
+      type: "MESSAGE_UPDATE",
+      message: { id: message.id, channel_id: message.channel_id, content: String(value) }
+    });
+    toast("この端末だけ編集しました");
+  }
+
+  function btn(label, primary, onPress){
+    return h(RN.Pressable, {
+      onPress: onPress,
+      style: {
+        flex: 1, marginHorizontal: 4, paddingVertical: 12, borderRadius: 8,
+        alignItems: "center", backgroundColor: primary ? "#5865f2" : "#4e5058"
+      }
+    }, h(RN.Text, { style: { color: "#ffffff", fontWeight: "bold" } }, label));
+  }
+
+  function EditSheet(props){
+    var st = React.useState(String(props.initial || ""));
+    var text = st[0], setText = st[1];
+    return h(RN.View, {
+      style: {
+        backgroundColor: "#2b2d31", padding: 16, paddingBottom: 28,
+        borderTopLeftRadius: 16, borderTopRightRadius: 16
+      }
+    },
+      h(RN.Text, { style: { color: "#ffffff", fontSize: 16, fontWeight: "bold", marginBottom: 10 } }, "ローカル編集（この端末だけ）"),
+      h(RN.TextInput, {
+        value: text,
+        onChangeText: setText,
+        multiline: true,
+        autoFocus: true,
+        placeholder: "表示する内容",
+        placeholderTextColor: "#80848e",
+        style: {
+          color: "#ffffff", backgroundColor: "#1e1f22", borderRadius: 8,
+          padding: 10, minHeight: 100, textAlignVertical: "top"
+        }
+      }),
+      h(RN.View, { style: { flexDirection: "row", marginTop: 14 } },
+        btn("キャンセル", false, function(){ closeSheet(); }),
+        btn("適用", true, function(){ closeSheet(); applyEdit(props.message, text); })
+      )
+    );
+  }
+
   function doEdit(message){
     closeSheet();
     setTimeout(function(){
-      v.ui.alerts.showInputAlert({
-        title: "ローカル編集",
-        initialValue: String(message.content || ""),
-        placeholder: "表示する内容",
-        confirmText: "適用",
-        cancelText: "キャンセル",
-        onConfirm: function(value){
-          FluxDispatcher.dispatch({
-            type: "MESSAGE_UPDATE",
-            message: { id: message.id, channel_id: message.channel_id, content: String(value) }
-          });
-          toast("この端末だけ編集しました");
-        }
-      });
+      ActionSheet.openLazy(
+        Promise.resolve({ default: EditSheet }),
+        "LocalMessageEditorSheet",
+        { message: message, initial: message.content }
+      );
     }, 300);
   }
 
