@@ -1,1 +1,81 @@
-(function(e){Object.defineProperty(e,Symbol.toStringTag,{value:`Module`});var t=/* @__PURE__ */ new Map,n=/* @__PURE__ */ new Set,r=[`message`,`msg`,`messageData`,`item`];function i(){return globalThis.revenge}function a(e){if(!e||typeof e!=`object`)return null;for(var t of r){var n=e[t];if(o(n))return{key:t,message:n}}for(var i of Object.values(e))if(i&&typeof i==`object`&&o(i))return{key:`__direct__`,message:i};return null}function o(e){return!e||typeof e!=`object`||typeof e.id!=`string`&&typeof e.id!=`number`?!1:typeof e.content==`string`||Array.isArray(e.attachments)||Array.isArray(e.embeds)||e.author?.id!=null||e.channel_id!=null}function s(e){return e?.id==null?null:String(e.id)}function c(e){var n=s(e);return n&&t.has(n)?t.get(n):String(e.content??``)}function l(e){var n=s(e);return!n||!t.has(n)?e:{...e,content:t.get(n)}}function u(e){return typeof e==`string`?e:String(e?.displayName||e?.name||``)}function d(){var e=i();for(var t of[e?.discord?.actions?.AlertActionCreators,e?.discord?.Actions?.AlertActionCreators,e?.discord?.common?.AlertActionCreators,e?.discord?.common?.Actions?.AlertActionCreators])if(t){for(var n of[`closeAlert`,`hideAlert`,`dismissAlert`,`close`])if(typeof t[n]==`function`)try{t[n]();return}catch{}}}function f(e){var t=i();for(var n of[t?.discord?.actions?.AlertActionCreators,t?.discord?.Actions?.AlertActionCreators,t?.discord?.common?.AlertActionCreators,t?.discord?.common?.Actions?.AlertActionCreators])if(n&&typeof n.openAlert==`function`)try{return n.openAlert(`local-message-editor`,e),!0}catch(e){console.error(`[LocalMessageEditor] openAlert failed`,e)}return console.warn(`[LocalMessageEditor] AlertActionCreators.openAlert was not found.`),!1}function p(){var e=i(),t=e?.discord?.design,n=e?.react?.ReactNative;return{AlertModal:t?.AlertModal,Button:t?.Button,TextInput:t?.TextInput||n?.TextInput,View:n?.View,Text:t?.Text||n?.Text}}function m(e){var{AlertModal:r,Button:i,TextInput:a,View:o,Text:c}=p(),[l,u]=revenge.react.React.useState(String(e.message.content??``)),f=s(e.message);if(!f||!r||!i||!a||!o)return null;var m=function(){t.set(f,l),n.delete(f),d()},h=function(){n.add(f),t.delete(f),d()},g=c?revenge.react.React.createElement(c,{style:{marginBottom:8}},`ローカル編集`):null,_=revenge.react.React.createElement(a,{value:l,onChangeText:function(e){return u(e)},multiline:!0,autoFocus:!0,placeholder:`表示するメッセージ内容`,style:{minHeight:120,paddingHorizontal:12,paddingVertical:10}}),v=revenge.react.React.createElement(o,{style:{flexDirection:`row`,gap:8,marginTop:12}},revenge.react.React.createElement(i,{text:`削除`,variant:`destructive`,onPress:h,grow:!0}),revenge.react.React.createElement(i,{text:`キャンセル`,variant:`secondary`,onPress:d,grow:!0}),revenge.react.React.createElement(i,{text:`保存`,variant:`primary`,onPress:m,grow:!0}));return revenge.react.React.createElement(r,{title:`ローカル編集`,content:revenge.react.React.createElement(o,null,g,_,v)})}function h(e){s(e)&&f(revenge.react.React.createElement(m,{message:e}))}function g(e,t){return typeof e.onLongPress!=`function`||e.__localMessageEditorWrapped?e:(e.onLongPress,{...e,__localMessageEditorWrapped:!0,onLongPress:function(...e){h(t)}})}function _(e){var[r,i]=e;if(!i||typeof i!=`object`)return e;var o=i,d=a(o);if(!d)return e;var f=d.message,p=s(f);if(!p)return e;var m=u(r);if(!(/message|chat|thread/i.test(m)||o.onLongPress!=null||o.message!=null||o.msg!=null))return e;if(n.has(p))return[r,{...o,style:[{display:`none`},o.style]},e[2]];var h=c(f),_=h===String(f.content??``)?f:l(f),v=o;return _!==f&&d.key!==`__direct__`&&(v={...v,[d.key]:_}),v=g(v,_),typeof v.content==`string`&&t.has(p)&&(v={...v,content:h}),[r,v,e[2]]}var v=null;return e.default=plugin({start(){var e=i(),t=e?.react?.ReactJSXRuntime;if(!t?.jsx||!t?.jsxs){console.warn(`[LocalMessageEditor] ReactJSXRuntime was not available.`);return}var n=[];for(var r of[`jsx`,`jsxs`])n.push(e.patcher.instead(t,r,function(e,t){return t(..._(e)??e)}));v=function(){for(var e of n.splice(0))try{e()}catch{}},console.log(`[LocalMessageEditor] started — memory-only local overrides enabled`)},stop(){v?.(),v=null,t.clear(),n.clear(),d(),console.log(`[LocalMessageEditor] stopped — local overrides cleared`)}}),e})({});
+(function(){
+  var v = vendetta;
+  var FluxDispatcher = v.metro.common.FluxDispatcher;
+  var MessageStore = v.metro.findByStoreName("MessageStore");
+  var unregs = [];
+
+  function toast(t){
+    try { v.ui.toasts.showToast(t); } catch(e) { console.log("[LocalMessageEditor] " + t); }
+  }
+
+  function opt(args, name){
+    for (var i = 0; i < args.length; i++) {
+      if (args[i].name === name) return args[i].value;
+    }
+    return undefined;
+  }
+
+  function findMessage(channelId, id){
+    if (id) return MessageStore.getMessage(channelId, String(id).trim());
+    var list = MessageStore.getMessages(channelId);
+    if (!list) return null;
+    if (typeof list.last === "function") return list.last();
+    var arr = list._array || [];
+    return arr[arr.length - 1] || null;
+  }
+
+  function reg(cmd){
+    unregs.push(v.commands.registerCommand(Object.assign({
+      applicationId: "-1",
+      inputType: 1,
+      type: 1
+    }, cmd)));
+  }
+
+  return {
+    onLoad: function(){
+      reg({
+        name: "localedit",
+        displayName: "localedit",
+        description: "Edit a message on this device only",
+        displayDescription: "Edit a message on this device only",
+        options: [
+          { name: "text", displayName: "text", description: "New text", displayDescription: "New text", required: true, type: 3 },
+          { name: "id", displayName: "id", description: "Message ID (default: latest message)", displayDescription: "Message ID (default: latest message)", required: false, type: 3 }
+        ],
+        execute: function(args, ctx){
+          var channelId = ctx.channel.id;
+          var msg = findMessage(channelId, opt(args, "id"));
+          if (!msg) { toast("Message not found"); return; }
+          FluxDispatcher.dispatch({
+            type: "MESSAGE_UPDATE",
+            message: { id: msg.id, channel_id: channelId, content: String(opt(args, "text")) },
+            guildId: ctx.guild ? ctx.guild.id : undefined
+          });
+          toast("Edited locally");
+        }
+      });
+
+      reg({
+        name: "localhide",
+        displayName: "localhide",
+        description: "Hide a message on this device only",
+        displayDescription: "Hide a message on this device only",
+        options: [
+          { name: "id", displayName: "id", description: "Message ID (default: latest message)", displayDescription: "Message ID (default: latest message)", required: false, type: 3 }
+        ],
+        execute: function(args, ctx){
+          var channelId = ctx.channel.id;
+          var msg = findMessage(channelId, opt(args, "id"));
+          if (!msg) { toast("Message not found"); return; }
+          FluxDispatcher.dispatch({ type: "MESSAGE_DELETE", id: msg.id, channelId: channelId });
+          toast("Hidden locally");
+        }
+      });
+    },
+    onUnload: function(){
+      unregs.forEach(function(u){ try { u(); } catch(e) {} });
+      unregs = [];
+    }
+  };
+})()

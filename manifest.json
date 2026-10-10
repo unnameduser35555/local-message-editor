@@ -1,19 +1,7 @@
 {
-  "format": 1,
-  "id": "com.local.local-message-editor",
   "name": "Local Message Editor",
-  "description": "Temporarily edit or hide Discord messages on this device only. Changes are memory-only and disappear after Discord restarts.",
-  "author": "Revenge Community",
-  "version": "1.0.0",
-  "dependencies": {
-    "revenge.api": {
-      "version": ">=1 <2"
-    },
-    "discord": {
-      "version": "*"
-    }
-  },
-  "dist": {
-    "script": "index.js"
-  }
+  "description": "/localedit と /localhide で、メッセージをこの端末だけで編集・非表示にします（再読み込みで元に戻ります）",
+  "authors": [{ "name": "ooz38" }],
+  "main": "index.js",
+  "vendetta": { "icon": "ic_edit_24px" }
 }
