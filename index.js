@@ -4,7 +4,8 @@
   var RN = v.metro.common.ReactNative;
   var FluxDispatcher = v.metro.common.FluxDispatcher;
   var ActionSheet = v.metro.findByProps("openLazy", "hideActionSheet");
-  var MessageActions = v.metro.findByProps("startEditMessage", "editMessage");
+  var EditActions = v.metro.findByProps("startEditMessage") || v.metro.findByProps("deleteMessage");
+  var SendActions = v.metro.findByProps("editMessage", "sendMessage");
   var patches = [];
   var pending = null;
   var h = React.createElement;
@@ -93,16 +94,17 @@
   function doEdit(message){
     closeSheet();
     setTimeout(function(){
-      if (MessageActions && typeof MessageActions.startEditMessage === "function") {
+      if (EditActions && typeof EditActions.startEditMessage === "function") {
         try {
           pending = { channelId: message.channel_id, messageId: message.id };
-          MessageActions.startEditMessage(message.channel_id, message.id, message.content || "");
+          EditActions.startEditMessage(message.channel_id, message.id, message.content || "");
           return;
         } catch(e) {
           pending = null;
           console.log("[LocalMessageEditor] startEditMessage failed", e);
         }
       }
+      toast("v1.4: 標準の編集UIが見つからないため簡易画面を使います");
       openFallbackSheet(message);
     }, 300);
   }
@@ -115,8 +117,8 @@
 
   return {
     onLoad: function(){
-      if (MessageActions && typeof MessageActions.editMessage === "function") {
-        patches.push(v.patcher.instead("editMessage", MessageActions, function(args, orig){
+      if (SendActions && typeof SendActions.editMessage === "function") {
+        patches.push(v.patcher.instead("editMessage", SendActions, function(args, orig){
           var channelId = args[0], messageId = args[1], body = args[2];
           if (pending && pending.messageId === messageId && pending.channelId === channelId) {
             pending = null;
@@ -125,7 +127,10 @@
               type: "MESSAGE_UPDATE",
               message: { id: messageId, channel_id: channelId, content: content }
             });
-            try { if (typeof MessageActions.endEditMessage === "function") MessageActions.endEditMessage(channelId); } catch(e) {}
+            try {
+              var ender = (EditActions && EditActions.endEditMessage) ? EditActions : SendActions;
+              if (ender && typeof ender.endEditMessage === "function") ender.endEditMessage(channelId);
+            } catch(e) {}
             toast("この端末だけ編集しました");
             return Promise.resolve({ ok: true, status: 200, body: {} });
           }
