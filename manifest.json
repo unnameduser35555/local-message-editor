@@ -1,7 +1,8 @@
 {
   "name": "Local Message Editor",
-  "description": "/localedit と /localhide で、メッセージをこの端末だけで編集・非表示にします（再読み込みで元に戻ります）",
+  "description": "/localedit と /localhide で、メッセージをこの端末だけで編集・非表示にします",
   "authors": [{ "name": "ooz38" }],
   "main": "index.js",
+  "hash": "d1a46f766972f013fbe5301893c5029dffcbf5833fb1a2ac84cb71fd7b88a8f0",
   "vendetta": { "icon": "ic_edit_24px" }
 }
